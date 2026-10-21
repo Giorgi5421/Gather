@@ -1,0 +1,2 @@
+import {auth} from "@/auth";import {jsonError} from "@/lib/http";import {createHmac} from "node:crypto";
+export async function GET(){const s=await auth();if(!s?.user?.id)return jsonError("Unauthorized",401);const enc=(v:unknown)=>Buffer.from(JSON.stringify(v)).toString("base64url");const head=enc({alg:"HS256",typ:"JWT"});const body=enc({sub:s.user.id,exp:Math.floor(Date.now()/1000)+300});const signature=createHmac("sha256",process.env.AUTH_SECRET??"").update(`${head}.${body}`).digest("base64url");return Response.json({token:`${head}.${body}.${signature}`,expiresIn:300});}

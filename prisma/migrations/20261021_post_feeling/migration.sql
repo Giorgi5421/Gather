@@ -1,0 +1,1 @@
+ALTER TABLE "Post" ADD COLUMN "feeling" VARCHAR(80);

@@ -1,0 +1,383 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProfilePrivacy {
+  PUBLIC
+  FRIENDS_ONLY
+  PRIVATE
+}
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+enum PostVisibility {
+  PUBLIC
+  FRIENDS_ONLY
+  PRIVATE
+}
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  POST_REACTION
+  COMMENT
+  MESSAGE
+  TAG
+  GROUP_INVITE
+}
+enum GroupVisibility {
+  PUBLIC
+  PRIVATE
+}
+enum GroupRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+enum ConversationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id                 String           @id @default(cuid())
+  name               String
+  email              String           @unique
+  emailVerified      DateTime?
+  image              String?
+  passwordHash       String?
+  bio                String?          @db.VarChar(500)
+  coverImage         String?
+  work               String?
+  education          String?
+  relationshipStatus String?
+  location           String?
+  privacy            ProfilePrivacy   @default(FRIENDS_ONLY)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  accounts           Account[]
+  sessions           Session[]
+  sentFriendships    Friendship[]     @relation("FriendshipRequester")
+  receivedFriendships Friendship[]    @relation("FriendshipAddressee")
+  posts              Post[]
+  reactions          Reaction[]
+  comments           Comment[]
+  stories            Story[]
+  participations     Participant[]
+  messages           Message[]
+  messageReactions   MessageReaction[]
+  notifications      Notification[]   @relation("NotificationRecipient")
+  triggeredNotices   Notification[]   @relation("NotificationActor")
+  resetTokens        PasswordResetToken[]
+  groupMemberships   GroupMember[]
+  pages              Page[]
+  pageFollows        PageFollower[]
+
+  @@index([name])
+  @@index([createdAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@index([expires])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  requester   User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status, createdAt])
+  @@index([requesterId, status, createdAt])
+}
+
+model Post {
+  id           String         @id @default(cuid())
+  authorId     String
+  content      String         @db.VarChar(5000)
+  visibility   PostVisibility @default(FRIENDS_ONLY)
+  feeling      String?        @db.VarChar(80)
+  groupId      String?
+  pageId       String?
+  originalPostId String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media        PostMedia[]
+  reactions    Reaction[]
+  comments     Comment[]
+  originalPost Post?          @relation("PostShares", fields: [originalPostId], references: [id], onDelete: SetNull)
+  shares       Post[]         @relation("PostShares")
+  group        CommunityGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  page         Page?          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([visibility, createdAt(sort: Desc)])
+  @@index([originalPostId])
+  @@index([groupId, createdAt(sort: Desc)])
+  @@index([pageId, createdAt(sort: Desc)])
+}
+
+model PostMedia {
+  id        String   @id @default(cuid())
+  postId    String
+  url       String
+  key       String
+  mediaType String
+  mimeType  String
+  size      Int
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+}
+
+model Reaction {
+  id        String       @id @default(cuid())
+  postId    String
+  userId    String
+  type      ReactionType
+  createdAt DateTime     @default(now())
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, type])
+  @@index([userId, createdAt])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  postId    String
+  authorId  String
+  parentId  String?
+  content   String    @db.VarChar(3000)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+  notifications Notification[]
+
+  @@index([postId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Story {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaUrl  String
+  mediaKey  String
+  mediaType String
+  caption   String?  @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Conversation {
+  id           String        @id @default(cuid())
+  title        String?
+  isGroup      Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  participants Participant[]
+  messages     Message[]
+
+  @@index([updatedAt(sort: Desc)])
+}
+
+model Participant {
+  id             String           @id @default(cuid())
+  conversationId String
+  userId         String
+  role           ConversationRole @default(MEMBER)
+  joinedAt       DateTime         @default(now())
+  lastReadAt     DateTime?
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String        @db.VarChar(10000)
+  attachmentUrl  String?
+  attachmentKey  String?
+  createdAt      DateTime      @default(now())
+  editedAt       DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId, createdAt])
+}
+
+model MessageReaction {
+  id        String       @id @default(cuid())
+  messageId String
+  userId    String
+  type      ReactionType
+  createdAt DateTime     @default(now())
+  message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId, type])
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  recipientId   String
+  actorId       String?
+  type          NotificationType
+  postId        String?
+  commentId     String?
+  friendshipId  String?
+  message       String           @db.VarChar(500)
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
+  recipient     User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor         User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  post          Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment       Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt, createdAt(sort: Desc)])
+  @@index([actorId, createdAt])
+}
+
+model CommunityGroup {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String?         @db.VarChar(1000)
+  visibility  GroupVisibility @default(PUBLIC)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  members     GroupMember[]
+  posts       Post[]
+
+  @@index([visibility, createdAt(sort: Desc)])
+}
+
+model GroupMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  userId    String
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+  group     CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Page {
+  id          String         @id @default(cuid())
+  ownerId     String
+  name        String
+  slug        String         @unique
+  category    String?
+  bio         String?        @db.VarChar(1000)
+  image       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  followers   PageFollower[]
+  posts       Post[]
+
+  @@index([ownerId, createdAt])
+}
+
+model PageFollower {
+  id        String   @id @default(cuid())
+  pageId    String
+  userId    String
+  createdAt DateTime @default(now())
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, userId])
+  @@index([userId, createdAt])
+}

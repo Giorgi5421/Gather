@@ -1,0 +1,3 @@
+import {auth} from "@/auth";import {jsonError} from "@/lib/http";import {createUploadUrl} from "@/lib/storage";import {randomUUID} from "node:crypto";import {z} from "zod";
+const schema=z.object({mimeType:z.enum(["image/jpeg","image/png","image/webp","image/gif","video/mp4","video/webm"]),size:z.number().int().positive().max(100*1024*1024)});
+export async function POST(req:Request){const s=await auth();if(!s?.user?.id)return jsonError("Unauthorized",401);const v=schema.safeParse(await req.json().catch(()=>null));if(!v.success)return jsonError("Invalid media",400);try{return Response.json(await createUploadUrl(s.user.id,randomUUID(),v.data.mimeType));}catch{return jsonError("Media storage is not configured",503)}}

@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+dist
+coverage
+.runtime/
+public/uploads/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+prisma/migrations/**/migration_lock.toml
+*.log
+.turbo
